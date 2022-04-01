@@ -1,56 +1,118 @@
-use chess::{Board, ChessMove, MoveGen, Color, Square, Piece};
+// use std::cmp;
 use std::str::FromStr;
 
-fn main() {
-    let position = Board::default().to_string();
-    // let position = Board::from_str("r2q1rk1/n2bbpp1/p2p3p/1p1Pp3/2P5/N2BB3/PPQ2PPP/R4RK1 w - - 2 15").unwrap().to_string();
+use chess::{Board, ChessMove, MoveGen, Color, Square, Piece, BoardStatus};
 
-    let best_move = get_move(&position);
+fn main() {
+    // let position = Board::default().to_string();
+    let position = "r5k1/6p1/4N1Pp/p4P1n/2K5/1R6/P7/8 w - - 0 58";
+
+    let best_move = best_move(&position);
     println!("Best move: {}", best_move);
 }
 
-fn get_move(position:&str) -> ChessMove {
+fn best_move(position:&str) -> ChessMove {
     let board = Board::from_str(&position).unwrap();
-    return get_best_move(board);
+    let mv;
+    let _eval;
+
+    if board.side_to_move() == Color::White {
+        (mv, _eval) = max_ab(board, 125, -125, 0);
+    } else {
+        (mv, _eval) = min_ab(board, -125, 125, 0);
+    }
+
+    return mv;
 }
 
-/*
-fn minimax(board:Board) {
-
+fn empty_move() -> ChessMove {
+    return ChessMove::new(Square::A1, Square::A2, None);
 }
-*/
 
-fn get_best_move(board:Board) -> ChessMove {
-    let mut moves = MoveGen::new_legal(&board);
-    let side_to_move = board.side_to_move();
+fn max_ab(board:Board, alpha:i8, beta:i8, depth:u8) -> (ChessMove, i8) {
+    if depth >= 8 {
+        return (empty_move(), total_eval(board));
+    }
 
-    let mut best_move = moves.next().unwrap();
-    let mut best_eval = total_eval(board.make_move_new(best_move));
+    let mut possible_moves = MoveGen::new_legal(&board);
 
-    for available_move in moves {
-        let new_board = board.make_move_new(available_move);
-        let eval = total_eval(new_board);
+    let mut beta = beta;
 
-        // println!("{}: {}", available_move, eval);
+    let mut top_move = empty_move();
+    let mut top_board;
+    let mut top_score = -120;
 
-        if side_to_move == Color::White && eval > best_eval {
-            best_move = available_move;
-            best_eval = eval;
-        } else if side_to_move == Color::Black && eval < best_eval {
-            best_move = available_move;
-            best_eval = eval;
+    for (index, possible_move) in possible_moves.enumerate() {
+        let new_board = board.make_move_new(possible_move);
+        let (the_move, score) = max_ab(new_board, alpha, beta, depth + 1);
+
+        if score > top_score || top_move == empty_move() {
+            top_move = the_move;
+            top_board = index;
+            top_score = score;
+        }
+
+        if score > alpha {
+            return (the_move, top_score);
+        }
+        if score > beta {
+            beta = score;
         }
     }
 
-    return best_move;
+    return (top_move, top_score);
+}
+
+fn min_ab(board:Board, alpha:i8, beta:i8, depth:u8) -> (ChessMove, i8) {
+    if depth >= 8 {
+        return (empty_move(), total_eval(board));
+    }
+
+    let mut possible_moves = MoveGen::new_legal(&board);
+
+    let mut beta = beta;
+    let mut lowest_move = empty_move();
+
+    let mut lowest_board;
+    let mut lowest_score = 120;
+
+    for (index, possible_move) in possible_moves.enumerate() {
+        let new_board = board.make_move_new(possible_move);
+        let (the_move, score) = max_ab(new_board, alpha, beta, depth + 1);
+
+        if score < lowest_score || lowest_move == empty_move() {
+            lowest_move = the_move;
+            lowest_board = index;
+            lowest_score = score;
+        }
+
+        if score < alpha {
+            return (the_move, lowest_score);
+        }
+        if score < beta {
+            beta = score;
+        }
+    }
+
+    return (lowest_move, lowest_score);
 }
 
 fn total_eval(board:Board) -> i8 {
+    if board.status() == BoardStatus::Stalemate {
+        return 0;
+    }
+    if board.status() == BoardStatus::Checkmate {
+        if board.side_to_move() == Color::White {
+            return -120;
+        }
+        return 120;
+    }
+
     let piece_eval = piece_evaluation(board);
     let king_eval = king_evaluation(board);
     let move_eval = move_evaluation(board);
 
-    // println!("{} {} {}", piece_eval, king_eval, move_eval);
+    println!("{} {} {}", piece_eval, king_eval, move_eval);
 
     return piece_eval + move_eval + king_eval;
 }

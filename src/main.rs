@@ -25,6 +25,8 @@ fn best_move(position:&str) -> ChessMove {
     let mut best_move = ChessMove::new(Square::A1, Square::A2, None);
     let mut best_eval = -120;
 
+    println!("Possible moves: {}", available_moves.len());
+
     // Iterate available moves to find best move by eval
     for mov in available_moves {
         let updated_board = board.make_move_new(mov);
@@ -36,11 +38,13 @@ fn best_move(position:&str) -> ChessMove {
             best_eval = eval;
         }
 
-        // Return fast
-        if best_eval >= 60 {
+        // Return fast if we find checkmate
+        if best_eval >= 12000 {
+            println!("Found mate: {}", best_move);
             return best_move;
         }
     }
 
+    println!("{} {}", best_move, best_eval / 100);
     return best_move;
 }

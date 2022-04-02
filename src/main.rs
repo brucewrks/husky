@@ -17,13 +17,17 @@ fn main() {
 // Find the best move for the given position
 fn best_move(position:&str) -> ChessMove {
     // Setup evaluator and starting board
-    let evaluator = Evaluator::new(3);
+    let evaluator = Evaluator::new(3, 0);
     let board = Board::from_str(&position).unwrap();
 
     // Move scoring initialization
-    let available_moves = MoveGen::new_legal(&board);
+    let mut available_moves = MoveGen::new_legal(&board);
     let mut best_move = ChessMove::new(Square::A1, Square::A2, None);
     let mut best_eval = -120;
+
+    if available_moves.len() == 1 {
+        return available_moves.next().unwrap();
+    }
 
     println!("Possible moves: {}", available_moves.len());
 

@@ -1,16 +1,55 @@
 use std::cmp;
+use std::time::Instant;
 
 use chess::*;
 
+const HASH_EXACT : u8 = 0;
+const HASH_ALPHA : u8 = 1;
+const HASH_BETA  : u8 = 2;
+
+struct HashKey {
+    key:   u64,
+    depth: u8,
+    flag:  u8,
+    eval:  i32
+}
+
+struct HashTable {
+    size: u64,
+    hashes: Vec<HashKey>
+}
+
+impl HashTable {
+    fn clear(&self) {
+        // self.hashes.resize(self.size, 0);
+    }
+    fn add() {
+
+    }
+    fn get() {
+
+    }
+}
+
 pub struct Evaluator {
     max_depth: u8,
+    start_time: Instant,
+    max_duration: u128
 }
 
 impl Evaluator {
 
-    pub fn new (max_depth: u8) -> Evaluator {
+    pub fn new (max_depth: u8, mut max_duration:u128) -> Evaluator {
+        let start_time = Instant::now();
+
+        if max_duration == 0 {
+            max_duration = u128::MAX;
+        }
+
         return Evaluator {
-            max_depth
+            max_depth,
+            start_time,
+            max_duration
         }
     }
 
@@ -22,6 +61,11 @@ impl Evaluator {
 
     fn minimax(&self, depth:u8, board:Board, alpha:i32, beta:i32, is_maximizing:bool) -> i32 {
         if depth >= self.max_depth {
+            return -1 * self.total_eval(board);
+        }
+
+        let duration = Instant::now().duration_since(self.start_time).as_millis();
+        if duration > self.max_duration {
             return -1 * self.total_eval(board);
         }
 

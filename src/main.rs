@@ -17,7 +17,7 @@ fn main() {
 // Find the best move for the given position
 fn best_move(position:&str) -> ChessMove {
     // Setup evaluator and starting board
-    let evaluator = Evaluator::new(3, 0);
+    let mut evaluator = Evaluator::new(3, 0);
     let board = Board::from_str(&position).unwrap();
 
     // Move scoring initialization

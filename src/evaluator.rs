@@ -1,5 +1,6 @@
 use std::cmp;
 use std::time::Instant;
+use std::collections::HashMap;
 
 use chess::*;
 
@@ -8,33 +9,16 @@ const HASH_ALPHA : u8 = 1;
 const HASH_BETA  : u8 = 2;
 
 struct HashKey {
-    key:   u64,
     depth: u8,
     flag:  u8,
     eval:  i32
 }
 
-struct HashTable {
-    size: u64,
-    hashes: Vec<HashKey>
-}
-
-impl HashTable {
-    fn clear(&self) {
-        // self.hashes.resize(self.size, 0);
-    }
-    fn add() {
-
-    }
-    fn get() {
-
-    }
-}
-
 pub struct Evaluator {
     max_depth: u8,
     start_time: Instant,
-    max_duration: u128
+    max_duration: u128,
+    hash_map: HashMap<u64, HashKey>
 }
 
 impl Evaluator {
@@ -49,24 +33,44 @@ impl Evaluator {
         return Evaluator {
             max_depth,
             start_time,
-            max_duration
+            max_duration,
+            hash_map: HashMap::new()
         }
     }
 
-    pub fn get_eval(&self, board:Board) -> i32 {
+    fn put_hash(&mut self, hash:u64, depth:u8, flag:u8, eval:i32) {
+        self.hash_map.insert(
+            hash,
+            HashKey { depth, flag, eval }
+        );
+    }
+
+    pub fn get_eval(&mut self, board:Board) -> i32 {
         let is_maximizing = board.side_to_move() == Color::White;
         let result =  self.minimax(0, board, -12000, 12000, is_maximizing);
         return result;
     }
 
-    fn minimax(&self, depth:u8, board:Board, alpha:i32, beta:i32, is_maximizing:bool) -> i32 {
+    fn minimax(&mut self, depth:u8, board:Board, alpha:i32, beta:i32, is_maximizing:bool) -> i32 {
+
+        // Final max depth return
         if depth >= self.max_depth {
-            return -1 * self.total_eval(board);
+            let eval = -1 * self.total_eval(board);
+            self.put_hash(board.get_hash(), depth, HASH_EXACT, eval);
+            return eval;
         }
 
+        // Over duration return
         let duration = Instant::now().duration_since(self.start_time).as_millis();
         if duration > self.max_duration {
             return -1 * self.total_eval(board);
+        }
+
+        // Stored board hash return
+        let board_hash = board.get_hash();
+        if self.hash_map.contains_key(&board_hash) {
+            // println!("Found hash {}", board_hash);
+            return self.hash_map.get(&board_hash).unwrap().eval;
         }
 
         let mut alpha = alpha;
@@ -81,9 +85,12 @@ impl Evaluator {
 
                 alpha = cmp::max(alpha, best_eval);
                 if beta <= alpha {
+                    self.put_hash(board.get_hash(), depth, HASH_ALPHA, best_eval);
                     return best_eval;
                 }
             }
+
+            self.put_hash(board.get_hash(), depth, HASH_EXACT, best_eval);
             return best_eval;
         } else {
             let mut best_eval = 12000;
@@ -93,9 +100,12 @@ impl Evaluator {
 
                 beta = cmp::min(beta, best_eval);
                 if beta <= alpha {
+                    self.put_hash(board.get_hash(), depth, HASH_BETA, best_eval);
                     return best_eval;
                 }
             }
+
+            self.put_hash(board.get_hash(), depth, HASH_EXACT, best_eval);
             return best_eval;
         }
     }

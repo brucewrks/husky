@@ -1,14 +1,15 @@
 use rand;
 use chess::*;
 use std::str::FromStr;
+use std::time::Instant;
 
 mod evaluator;
 use crate::evaluator::Evaluator;
 
 // TODO: implement uci interface
 fn main() {
-    // let position = Board::default().to_string();
-    let position = "r2qkb1r/pp2nppp/3p4/2pNN1B1/2BnP3/3P4/PPP2PPP/R2bK2R w KQkq - 1 0";
+    let position = Board::default().to_string();
+    // let position = "r1b3kr/3pR1p1/ppq4p/5P2/4Q3/B7/P5PP/5RK1 w - - 1 0";
 
     let best_move = best_move(&position);
     println!("Best move: {}", best_move);
@@ -17,7 +18,7 @@ fn main() {
 // Find the best move for the given position
 fn best_move(position:&str) -> ChessMove {
     // Setup evaluator and starting board
-    let mut evaluator = Evaluator::new(3, 0);
+    let mut evaluator = Evaluator::new(500);
     let board = Board::from_str(&position).unwrap();
 
     // Move scoring initialization
@@ -30,22 +31,31 @@ fn best_move(position:&str) -> ChessMove {
     }
 
     println!("Possible moves: {}", available_moves.len());
+    let sorted_moves = Evaluator::order_moves(board, available_moves);
 
     // Iterate available moves to find best move by eval
-    for mov in available_moves {
-        let updated_board = board.make_move_new(mov);
-        let eval = evaluator.get_eval(updated_board);
-
-        // Add some randomness to the equation
-        if eval > best_eval || eval == best_eval && rand::random() {
-            best_move = mov;
-            best_eval = eval;
+    for depth in 3..u8::MAX {
+        if evaluator.max_duration <= Instant::now().duration_since(evaluator.start_time).as_millis() {
+            break;
         }
 
-        // Return fast if we find checkmate
-        if best_eval >= 12000 {
-            println!("Found mate: {}", best_move);
-            return best_move;
+        for mov in &sorted_moves {
+            let updated_board = board.make_move_new(*mov);
+            let eval = evaluator.get_eval(updated_board, depth);
+
+            // Add some randomness to the equation
+            if eval > best_eval || eval == best_eval && rand::random() {
+                best_move = *mov;
+                best_eval = eval;
+            }
+
+            println!("{} {} {} {}", mov, eval, evaluator.hash_map.len(), depth);
+
+            // Return fast if we find checkmate
+            if best_eval >= 12000 {
+                println!("Found mate: {}", best_move);
+                return best_move;
+            }
         }
     }
 

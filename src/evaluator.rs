@@ -8,22 +8,21 @@ const HASH_EXACT : u8 = 0;
 const HASH_ALPHA : u8 = 1;
 const HASH_BETA  : u8 = 2;
 
-struct HashKey {
+pub struct HashKey {
     depth: u8,
     flag:  u8,
     eval:  i32
 }
 
 pub struct Evaluator {
-    max_depth: u8,
-    start_time: Instant,
-    max_duration: u128,
-    hash_map: HashMap<u64, HashKey>
+    pub start_time: Instant,
+    pub max_duration: u128,
+    pub hash_map: HashMap<u64, HashKey>
 }
 
 impl Evaluator {
 
-    pub fn new (max_depth: u8, mut max_duration:u128) -> Evaluator {
+    pub fn new (mut max_duration:u128) -> Evaluator {
         let start_time = Instant::now();
 
         if max_duration == 0 {
@@ -31,32 +30,46 @@ impl Evaluator {
         }
 
         return Evaluator {
-            max_depth,
             start_time,
             max_duration,
-            hash_map: HashMap::new()
+            hash_map: HashMap::with_capacity(1024)
         }
     }
 
-    fn put_hash(&mut self, hash:u64, depth:u8, flag:u8, eval:i32) {
+    pub fn order_moves(board:Board, available_moves:MoveGen) -> Vec<ChessMove> {
+        let mut moves:Vec<ChessMove> = available_moves.collect();
+
+        // Favor moves with lower-value pieces
+        moves.sort_by(|a, b| board.piece_on(b.get_source()).cmp(&board.piece_on(a.get_source())));
+
+        // Favor movies taking pieces with lower-value pieces
+        moves.sort_by(|a, b| board.piece_on(a.get_dest()).cmp(&board.piece_on(b.get_dest())));
+
+        // Favor moves that are checks
+        moves.sort_by(|a, b| board.make_move_new(*b).checkers().to_size(0).cmp(&board.make_move_new(*a).checkers().to_size(0)));
+
+        return moves;
+    }
+
+    fn hash_put(&mut self, hash:u64, depth:u8, flag:u8, eval:i32) {
         self.hash_map.insert(
             hash,
             HashKey { depth, flag, eval }
         );
     }
 
-    pub fn get_eval(&mut self, board:Board) -> i32 {
+    pub fn get_eval(&mut self, board:Board, depth:u8) -> i32 {
         let is_maximizing = board.side_to_move() == Color::White;
-        let result =  self.minimax(0, board, -12000, 12000, is_maximizing);
+        let result =  self.minimax(0, board, i32::MIN, i32::MAX, is_maximizing, depth);
         return result;
     }
 
-    fn minimax(&mut self, depth:u8, board:Board, alpha:i32, beta:i32, is_maximizing:bool) -> i32 {
+    fn minimax(&mut self, depth:u8, board:Board, alpha:i32, beta:i32, is_maximizing:bool, max_depth:u8) -> i32 {
 
         // Final max depth return
-        if depth >= self.max_depth {
+        if depth >= max_depth {
             let eval = -1 * self.total_eval(board);
-            self.put_hash(board.get_hash(), depth, HASH_EXACT, eval);
+            self.hash_put(board.get_hash(), depth, HASH_EXACT, eval);
             return eval;
         }
 
@@ -69,8 +82,18 @@ impl Evaluator {
         // Stored board hash return
         let board_hash = board.get_hash();
         if self.hash_map.contains_key(&board_hash) {
-            // println!("Found hash {}", board_hash);
-            return self.hash_map.get(&board_hash).unwrap().eval;
+            let hash = self.hash_map.get(&board_hash).unwrap();
+            if hash.depth > depth {
+                if hash.flag == HASH_ALPHA && hash.eval >= beta {
+                    return hash.eval;
+                }
+                if hash.flag == HASH_BETA && hash.eval >= alpha {
+                    return hash.eval;
+                }
+                if hash.flag == HASH_EXACT {
+                    return hash.eval;
+                }
+            }
         }
 
         let mut alpha = alpha;
@@ -78,34 +101,34 @@ impl Evaluator {
         let available_moves = MoveGen::new_legal(&board);
 
         if is_maximizing {
-            let mut best_eval = -12000;
-            for mov in available_moves {
+            let mut best_eval = i32::MIN;
+            for mov in Evaluator::order_moves(board, available_moves) {
                 let updated_board = board.make_move_new(mov);
-                best_eval = cmp::max(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing));
+                best_eval = cmp::max(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, max_depth));
 
                 alpha = cmp::max(alpha, best_eval);
                 if beta <= alpha {
-                    self.put_hash(board.get_hash(), depth, HASH_ALPHA, best_eval);
-                    return best_eval;
+                    self.hash_put(board.get_hash(), depth, HASH_ALPHA, best_eval);
+                    return alpha;
                 }
             }
 
-            self.put_hash(board.get_hash(), depth, HASH_EXACT, best_eval);
+            self.hash_put(board.get_hash(), depth, HASH_EXACT, best_eval);
             return best_eval;
         } else {
-            let mut best_eval = 12000;
-            for mov in available_moves {
+            let mut best_eval = i32::MAX;
+            for mov in Evaluator::order_moves(board, available_moves) {
                 let updated_board = board.make_move_new(mov);
-                best_eval = cmp::min(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing));
+                best_eval = cmp::min(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, max_depth));
 
                 beta = cmp::min(beta, best_eval);
                 if beta <= alpha {
-                    self.put_hash(board.get_hash(), depth, HASH_BETA, best_eval);
-                    return best_eval;
+                    self.hash_put(board.get_hash(), depth, HASH_BETA, best_eval);
+                    return beta;
                 }
             }
 
-            self.put_hash(board.get_hash(), depth, HASH_EXACT, best_eval);
+            self.hash_put(board.get_hash(), depth, HASH_EXACT, best_eval);
             return best_eval;
         }
     }
@@ -124,10 +147,9 @@ impl Evaluator {
         let piece_eval = Evaluator::piece_evaluation(board);
         let king_eval = Evaluator::king_evaluation(board);
         let move_eval = Evaluator::move_evaluation(board);
+        let center_eval = Evaluator::center_evaluation(board);
 
-        // println!("{} {} {}", piece_eval, king_eval, move_eval);
-
-        return piece_eval + move_eval + king_eval;
+        return piece_eval + move_eval + king_eval + center_eval;
     }
 
     fn piece_evaluation(board:Board) -> i32 {
@@ -214,5 +236,28 @@ impl Evaluator {
         }
 
         return (white_moves - black_moves) * 10;
+    }
+
+    fn center_evaluation(board:Board) -> i32 {
+        let mut white_score = 0;
+        let mut black_score = 0;
+
+        for square in [Square::E4, Square::E5, Square::D4, Square::D5] {
+            match board.color_on(square) {
+                Some(Color::White) => white_score += 1000,
+                Some(Color::Black) => black_score += 1000,
+                None => ()
+            }
+        }
+
+        for square in [Square::E3, Square::E6, Square::D3, Square::D6, Square::C4, Square::C5] {
+            match board.color_on(square) {
+                Some(Color::White) => white_score += 500,
+                Some(Color::Black) => black_score += 500,
+                None => ()
+            }
+        }
+
+        return -(white_score - black_score) / 16;
     }
 }

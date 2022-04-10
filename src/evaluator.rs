@@ -2,6 +2,7 @@ use std::cmp;
 use std::time::Instant;
 use std::collections::HashMap;
 
+use rand;
 use chess::*;
 
 const HASH_EXACT : u8 = 0;
@@ -22,16 +23,12 @@ pub struct Evaluator {
 
 impl Evaluator {
 
-    pub fn new (mut max_duration:u128) -> Evaluator {
+    pub fn new () -> Evaluator {
         let start_time = Instant::now();
-
-        if max_duration == 0 {
-            max_duration = u128::MAX;
-        }
 
         return Evaluator {
             start_time,
-            max_duration,
+            max_duration: u128::MAX,
             hash_map: HashMap::with_capacity(1024)
         }
     }
@@ -42,7 +39,7 @@ impl Evaluator {
         // Favor moves with lower-value pieces
         moves.sort_by(|a, b| board.piece_on(b.get_source()).cmp(&board.piece_on(a.get_source())));
 
-        // Favor movies taking pieces with lower-value pieces
+        // Favor moves taking pieces with lower-value pieces
         moves.sort_by(|a, b| board.piece_on(a.get_dest()).cmp(&board.piece_on(b.get_dest())));
 
         // Favor moves that are checks
@@ -58,13 +55,69 @@ impl Evaluator {
         );
     }
 
+    pub fn best_move(&mut self, board:Board, max_duration:u128) -> (ChessMove, f32) {
+        self.start_time = Instant::now();
+
+        if max_duration == 0 {
+            self.max_duration = u128::MAX;
+        } else {
+            self.max_duration = max_duration;
+        }
+
+        // Move scoring initialization
+        let mut available_moves = MoveGen::new_legal(&board);
+        let mut best_move = ChessMove::new(Square::A1, Square::A2, None);
+        let mut best_eval = i32::MIN;
+
+        if available_moves.len() == 1 {
+            let the_move = available_moves.next().unwrap();
+            let the_eval = self.total_eval(board.make_move_new(the_move));
+            return (the_move, Evaluator::convert_eval(the_eval));
+        }
+
+        println!("Possible moves: {}", available_moves.len());
+        let sorted_moves = Evaluator::order_moves(board, available_moves);
+
+        // Iterate available moves to find best move by eval
+        for depth in 1..u8::MAX {
+            if self.max_duration <= Instant::now().duration_since(self.start_time).as_millis() {
+                break;
+            }
+
+            for mov in &sorted_moves {
+                let updated_board = board.make_move_new(*mov);
+                let eval = self.get_eval(updated_board, depth);
+
+                // Add some randomness to the equation
+                if eval > best_eval || eval == best_eval && rand::random() {
+                    best_move = *mov;
+                    best_eval = eval;
+                }
+
+                // Return fast if we find checkmate
+                if best_eval >= 10000 {
+                    return (best_move, Evaluator::convert_eval(best_eval));
+                }
+            }
+
+            // println!("Best At: Depth: {} Move: {} Eval {}", depth, best_move, (best_eval as f32 / 100 as f32));
+        }
+
+        // println!("Best Move: {} Eval: {}", best_move, (best_eval as f32 / 100 as f32));
+        return (best_move, Evaluator::convert_eval(best_eval));
+    }
+
+    fn convert_eval(eval:i32) -> f32 {
+        return eval as f32 / 100 as f32;
+    }
+
     pub fn get_eval(&mut self, board:Board, depth:u8) -> i32 {
         let is_maximizing = board.side_to_move() == Color::White;
-        let result =  self.minimax(0, board, i32::MIN, i32::MAX, is_maximizing, depth);
+        let result =  self.minimax(0, board, i32::MIN, i32::MAX, is_maximizing, false, depth);
         return result;
     }
 
-    fn minimax(&mut self, depth:u8, board:Board, alpha:i32, beta:i32, is_maximizing:bool, max_depth:u8) -> i32 {
+    fn minimax(&mut self, depth:u8, board:Board, alpha:i32, beta:i32, is_maximizing:bool, only_captures:bool, max_depth:u8) -> i32 {
 
         // Final max depth return
         if depth >= max_depth {
@@ -84,13 +137,13 @@ impl Evaluator {
         if self.hash_map.contains_key(&board_hash) {
             let hash = self.hash_map.get(&board_hash).unwrap();
             if hash.depth > depth {
-                if hash.flag == HASH_ALPHA && hash.eval >= beta {
+                if hash.flag == HASH_ALPHA && beta <= hash.eval {
                     return hash.eval;
                 }
-                if hash.flag == HASH_BETA && hash.eval >= alpha {
+                if hash.flag == HASH_BETA && hash.eval <= alpha {
                     return hash.eval;
                 }
-                if hash.flag == HASH_EXACT {
+                if hash.flag == HASH_EXACT && beta >= hash.eval && alpha <= hash.eval {
                     return hash.eval;
                 }
             }
@@ -98,13 +151,22 @@ impl Evaluator {
 
         let mut alpha = alpha;
         let mut beta = beta;
-        let available_moves = MoveGen::new_legal(&board);
+        let mut available_moves = MoveGen::new_legal(&board);
+
+        if only_captures {
+            let targets = board.color_combined(!board.side_to_move());
+            available_moves.set_iterator_mask(*targets);
+
+            if available_moves.len() == 0 {
+                return -1 * self.total_eval(board);
+            }
+        }
 
         if is_maximizing {
             let mut best_eval = i32::MIN;
             for mov in Evaluator::order_moves(board, available_moves) {
                 let updated_board = board.make_move_new(mov);
-                best_eval = cmp::max(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, max_depth));
+                best_eval = cmp::max(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, only_captures, max_depth));
 
                 alpha = cmp::max(alpha, best_eval);
                 if beta <= alpha {
@@ -119,7 +181,7 @@ impl Evaluator {
             let mut best_eval = i32::MAX;
             for mov in Evaluator::order_moves(board, available_moves) {
                 let updated_board = board.make_move_new(mov);
-                best_eval = cmp::min(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, max_depth));
+                best_eval = cmp::min(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, only_captures, max_depth));
 
                 beta = cmp::min(beta, best_eval);
                 if beta <= alpha {

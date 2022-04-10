@@ -1,6 +1,3 @@
-use chess::*;
-use std::str::FromStr;
-
 mod evaluator;
 mod uci;
 

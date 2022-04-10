@@ -1,4 +1,5 @@
 use std::io;
+use std::str::FromStr;
 
 use chess::*;
 use crate::evaluator::Evaluator;
@@ -29,14 +30,14 @@ impl Uci {
             }
 
             let argv: Vec<&str> = line.split_whitespace().collect();
-            let cmd = argv[0].trim();
+            let cmd = argv[0];
 
             match cmd {
                 "uci" => self.uci(),
                 "setoption" => (),
-                "ucinewgame" => (),
+                "ucinewgame" => self.ucinewgame(),
                 "isready" => self.isready(),
-                "position" => self.position(),
+                "position" => self.position(argv),
                 "go" => (),
                 "quit" => break,
                 _ => println!("Unrecognized command: {}", cmd),
@@ -50,6 +51,11 @@ impl Uci {
         println!("uciok");
     }
 
+    fn ucinewgame(&mut self) {
+        self.board = Board::default();
+        self.evaluator.clear_hash_map();
+    }
+
     fn isready(&mut self) {
         println!("readyok");
     }
@@ -58,7 +64,46 @@ impl Uci {
         println!("...");
     }
 
-    fn position(&mut self) {
-        println!("...");
+    fn position(&mut self, argv:Vec<&str>) {
+        if argv.len() < 2 {
+            return;
+        }
+
+        let mut index = 2;
+        let pos_type = argv[1];
+        let moves:Vec<&str>;
+
+        match pos_type {
+            "fen" => {
+                let mut fen_str = String::new();
+
+                while index < argv.len() && argv[index].to_lowercase() != "moves" {
+                    fen_str.push_str(argv[index]);
+                    fen_str.push_str(" ");
+                    index += 1;
+                }
+
+                self.board = Board::from_str(fen_str.as_str()).unwrap();
+            },
+            "startpos" => {
+                self.board = Board::default();
+            },
+            _ => (),
+        }
+
+        if index < argv.len() && argv[index].to_lowercase() == "moves" {
+            index += 1;
+
+            let mut new_board = self.board;
+
+            while index < argv.len() {
+                println!("move: {}", argv[index]);
+                let new_move = ChessMove::from_san(&self.board, argv[index]).unwrap();
+                new_board = new_board.make_move_new(new_move);
+                index += 1;
+            }
+
+            self.board = new_board;
+        }
     }
 }

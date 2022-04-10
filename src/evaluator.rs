@@ -47,6 +47,11 @@ impl Evaluator {
         return moves;
     }
 
+    pub fn clear_hash_map(&mut self) {
+        self.hash_map.clear();
+        assert!(self.hash_map.is_empty());
+    }
+
     fn hash_put(&mut self, hash:u64, depth:u8, flag:u8, eval:i32) {
         self.hash_map.insert(
             hash,

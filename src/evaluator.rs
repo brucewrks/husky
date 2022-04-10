@@ -22,7 +22,6 @@ pub struct Evaluator {
 }
 
 impl Evaluator {
-
     pub fn new () -> Evaluator {
         let start_time = Instant::now();
 

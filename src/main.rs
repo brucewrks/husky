@@ -8,5 +8,6 @@ use crate::evaluator::Evaluator;
 
 fn main() {
     let evaluator = Evaluator::new();
-    uci::parse_with(evaluator);
+    let mut uci_engine = uci::new(evaluator);
+    uci_engine.parse();
 }

@@ -82,7 +82,7 @@ impl Evaluator {
         let sorted_moves = Evaluator::order_moves(board, available_moves);
 
         // Iterate available moves to find best move by eval
-        for depth in 3..u8::MAX {
+        for depth in 1..u8::MAX {
             if self.max_duration <= Instant::now().duration_since(self.start_time).as_millis() {
                 break;
             }
@@ -95,15 +95,15 @@ impl Evaluator {
                 let updated_board = board.make_move_new(*mov);
                 let eval = self.get_eval(updated_board, depth);
 
-                // Add some randomness to the equation
                 if eval > best_eval || eval == best_eval && rand::random() {
                     best_move = *mov;
                     best_eval = eval;
+                }
 
-                    if debug {
-                        let pv = format!("{}", mov);
-                        println!("info score cp {} depth {} nodes {} time {} pv {}", best_eval, depth, self.hash_map.len(), Instant::now().duration_since(self.start_time).as_millis(), pv);
-                    }
+                // UCI Debugging
+                if debug {
+                    let pv = format!("{}", mov);
+                    println!("info score cp {} depth {} nodes {} time {} pv {}", best_eval, depth, self.hash_map.len(), Instant::now().duration_since(self.start_time).as_millis(), pv);
                 }
 
                 // Return fast if we find checkmate
@@ -122,7 +122,7 @@ impl Evaluator {
 
     pub fn get_eval(&mut self, board:Board, depth:u8) -> i32 {
         let is_maximizing = board.side_to_move() == Color::White;
-        let result =  self.minimax(0, board, i32::MIN, i32::MAX, is_maximizing, false, depth);
+        let result = self.minimax(0, board, i32::MIN, i32::MAX, is_maximizing, false, depth);
         return result;
     }
 
@@ -130,9 +130,9 @@ impl Evaluator {
 
         // Final max depth return
         if depth >= max_depth {
-            let eval = self.total_eval(board);
+            let eval = -self.total_eval(board);
             self.hash_put(board.get_hash(), depth, HASH_EXACT, eval);
-            return -eval;
+            return eval;
         }
 
         // Over duration return
@@ -145,7 +145,7 @@ impl Evaluator {
         let board_hash = board.get_hash();
         if self.hash_map.contains_key(&board_hash) {
             let hash = self.hash_map.get(&board_hash).unwrap();
-            if hash.depth > depth && 1 == 0 {
+            if hash.depth > depth && 0 == 1 {
                 if hash.flag == HASH_ALPHA && beta <= hash.eval {
                     return hash.eval;
                 }

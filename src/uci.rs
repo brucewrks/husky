@@ -62,7 +62,7 @@ impl Uci {
 
     fn go(&mut self, argv:Vec<&str>) {
         self.evaluator.clear_hash_map();
-        let (best_move, eval) = self.evaluator.best_move(self.board, 5000, true);
+        let (best_move, _eval) = self.evaluator.best_move(self.board, 1000, true);
         println!("bestmove {}", best_move);
     }
 
@@ -73,7 +73,6 @@ impl Uci {
 
         let mut index = 2;
         let pos_type = argv[1];
-        let moves:Vec<&str>;
 
         match pos_type {
             "fen" => {

@@ -46,7 +46,7 @@ impl Uci {
     }
 
     fn uci(&mut self) {
-        println!("id name Husky");
+        println!("id name Husky {}", env!("CARGO_PKG_VERSION"));
         println!("id author Bruce Caldwell");
         println!("uciok");
     }

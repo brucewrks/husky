@@ -165,10 +165,10 @@ impl Evaluator {
         if only_captures {
             let targets = board.color_combined(!board.side_to_move());
             available_moves.set_iterator_mask(*targets);
+        }
 
-            if available_moves.len() == 0 {
-                return -1 * self.total_eval(board);
-            }
+        if available_moves.len() == 0 {
+            return -self.total_eval(board);
         }
 
         if is_maximizing {

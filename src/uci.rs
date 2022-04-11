@@ -38,7 +38,7 @@ impl Uci {
                 "ucinewgame" => self.ucinewgame(),
                 "isready" => self.isready(),
                 "position" => self.position(argv),
-                "go" => (),
+                "go" => self.go(argv),
                 "quit" => break,
                 _ => println!("Unrecognized command: {}", cmd),
             }
@@ -60,8 +60,10 @@ impl Uci {
         println!("readyok");
     }
 
-    fn go(&mut self) {
-        println!("...");
+    fn go(&mut self, argv:Vec<&str>) {
+        self.evaluator.clear_hash_map();
+        let (best_move, eval) = self.evaluator.best_move(self.board, 5000, true);
+        println!("bestmove {}", best_move);
     }
 
     fn position(&mut self, argv:Vec<&str>) {
@@ -97,8 +99,7 @@ impl Uci {
             let mut new_board = self.board;
 
             while index < argv.len() {
-                println!("move: {}", argv[index]);
-                let new_move = ChessMove::from_san(&self.board, argv[index]).unwrap();
+                let new_move = ChessMove::from_str(argv[index]).unwrap();
                 new_board = new_board.make_move_new(new_move);
                 index += 1;
             }

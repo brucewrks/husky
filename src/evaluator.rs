@@ -60,6 +60,7 @@ impl Evaluator {
     }
 
     pub fn best_move(&mut self, board:Board, max_duration:u128, debug:bool) -> (ChessMove, f32) {
+        self.clear_hash_map();
         self.start_time = Instant::now();
 
         if max_duration == 0 {
@@ -119,6 +120,7 @@ impl Evaluator {
 
                 // Return fast if we find checkmate
                 if best_eval >= 10000 || best_eval <= -10000 {
+                    println!("MATE!");
                     return (best_move, Evaluator::convert_eval(best_eval));
                 }
             }
@@ -148,7 +150,7 @@ impl Evaluator {
 
         // Over duration return
         let duration = Instant::now().duration_since(self.start_time).as_millis();
-        if duration > self.max_duration {
+        if duration >= self.max_duration {
             return self.total_eval(board);
         }
 
@@ -156,14 +158,14 @@ impl Evaluator {
         let board_hash = board.get_hash();
         if self.hash_map.contains_key(&board_hash) {
             let hash = self.hash_map.get(&board_hash).unwrap();
-            if hash.depth > depth {
+            if hash.depth >= depth {
                 if hash.flag == HASH_ALPHA && beta <= hash.eval {
                     return hash.eval;
                 }
                 if hash.flag == HASH_BETA && hash.eval <= alpha {
                     return hash.eval;
                 }
-                if hash.flag == HASH_EXACT && beta >= hash.eval && alpha <= hash.eval {
+                if hash.flag == HASH_EXACT && hash.depth > depth && beta >= hash.eval && alpha <= hash.eval {
                     return hash.eval;
                 }
             }

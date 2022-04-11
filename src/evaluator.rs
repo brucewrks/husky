@@ -73,6 +73,10 @@ impl Evaluator {
         let mut best_move = ChessMove::new(Square::A1, Square::A2, None);
         let mut best_eval = i32::MIN;
 
+        if board.side_to_move() == Color::Black {
+            best_eval = i32::MAX;
+        }
+
         if available_moves.len() == 1 {
             let the_move = available_moves.next().unwrap();
             let the_eval = self.total_eval(board.make_move_new(the_move));
@@ -95,9 +99,16 @@ impl Evaluator {
                 let updated_board = board.make_move_new(*mov);
                 let eval = self.get_eval(updated_board, depth);
 
-                if eval > best_eval || eval == best_eval && rand::random() {
-                    best_move = *mov;
-                    best_eval = eval;
+                if board.side_to_move() == Color::White {
+                    if eval > best_eval || eval == best_eval && rand::random() {
+                        best_move = *mov;
+                        best_eval = eval;
+                    }
+                } else {
+                    if eval < best_eval || eval == best_eval && rand::random() {
+                        best_move = *mov;
+                        best_eval = eval;
+                    }
                 }
 
                 // UCI Debugging
@@ -107,7 +118,7 @@ impl Evaluator {
                 }
 
                 // Return fast if we find checkmate
-                if best_eval >= 10000 {
+                if best_eval >= 10000 || best_eval <= -10000 {
                     return (best_move, Evaluator::convert_eval(best_eval));
                 }
             }
@@ -130,7 +141,7 @@ impl Evaluator {
 
         // Final max depth return
         if depth >= max_depth {
-            let eval = -self.total_eval(board);
+            let eval = self.total_eval(board);
             self.hash_put(board.get_hash(), depth, HASH_EXACT, eval);
             return eval;
         }
@@ -138,14 +149,14 @@ impl Evaluator {
         // Over duration return
         let duration = Instant::now().duration_since(self.start_time).as_millis();
         if duration > self.max_duration {
-            return -self.total_eval(board);
+            return self.total_eval(board);
         }
 
         // Stored board hash return
         let board_hash = board.get_hash();
         if self.hash_map.contains_key(&board_hash) {
             let hash = self.hash_map.get(&board_hash).unwrap();
-            if hash.depth > depth && 0 == 1 {
+            if hash.depth > depth {
                 if hash.flag == HASH_ALPHA && beta <= hash.eval {
                     return hash.eval;
                 }
@@ -168,14 +179,19 @@ impl Evaluator {
         }
 
         if available_moves.len() == 0 {
-            return -self.total_eval(board);
+            if board.side_to_move() == Color::White {
+                return -12000;
+            }
+            return 12000;
         }
 
         if is_maximizing {
             let mut best_eval = i32::MIN;
             for mov in Evaluator::order_moves(board, available_moves) {
                 let updated_board = board.make_move_new(mov);
-                best_eval = cmp::max(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, only_captures, max_depth));
+                let eval = self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, only_captures, max_depth);
+
+                best_eval = cmp::max(best_eval, eval);
 
                 alpha = cmp::max(alpha, best_eval);
                 if beta <= alpha {
@@ -190,9 +206,11 @@ impl Evaluator {
             let mut best_eval = i32::MAX;
             for mov in Evaluator::order_moves(board, available_moves) {
                 let updated_board = board.make_move_new(mov);
-                best_eval = cmp::min(best_eval, self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, only_captures, max_depth));
+                let eval = self.minimax(depth + 1, updated_board, alpha, beta, !is_maximizing, only_captures, max_depth);
 
+                best_eval = cmp::min(best_eval, eval);
                 beta = cmp::min(beta, best_eval);
+
                 if beta <= alpha {
                     self.hash_put(board.get_hash(), depth, HASH_BETA, best_eval);
                     return beta;
@@ -207,12 +225,6 @@ impl Evaluator {
     fn total_eval(&self, board:Board) -> i32 {
         if board.status() == BoardStatus::Stalemate {
             return 0;
-        }
-        if board.status() == BoardStatus::Checkmate {
-            if board.side_to_move() == Color::White {
-                return 12000;
-            }
-            return -12000;
         }
 
         let piece_eval = Evaluator::piece_evaluation(board);
